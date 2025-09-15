@@ -1,0 +1,5 @@
+{
+  "name": "Executive Risk Briefing",
+  "description": "An AI-powered daily briefing that aggregates and summarizes trending global executive risks using Google Search grounding for up-to-date intelligence.",
+  "requestFramePermissions": []
+}
