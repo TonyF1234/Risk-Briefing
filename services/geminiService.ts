@@ -143,11 +143,12 @@ Summary: [The Risk Summary]`;
 
 export async function fetchFraudEvents(): Promise<Risk[]> {
   try {
-    const prompt = `Identify and list the most newsworthy corporate or financial fraud events primarily related to the US that have occurred or come to light this year. For each event, provide a title identifying the event and a concise one-sentence summary of the incident. Format each event as follows, and separate each with '---':
+    const prompt = `Identify and list the most newsworthy corporate or financial fraud events primarily related to the US that have occurred or come to light this year. For each event, provide a title identifying the event, a concise one-sentence summary of the incident, and the date it was reported or occurred. Format each event as follows, and separate each with '---':
 
 Title: [The Fraud Event Title, e.g., "Company X Accounting Scandal"]
-Summary: [A single sentence summarizing the fraud.]`;
-    return await executeRiskQuery(prompt, parseRisks);
+Summary: [A single sentence summarizing the fraud.]
+Date: [Date of event or disclosure, e.g., YYYY-MM-DD]`;
+    return await executeRiskQuery(prompt, parseHeadlines);
   } catch (error) {
     console.error("Error fetching fraud events from Gemini API:", error);
     if (error instanceof Error) {
@@ -159,11 +160,12 @@ Summary: [A single sentence summarizing the fraud.]`;
 
 export async function fetchCybersecurityIncidents(): Promise<Risk[]> {
   try {
-    const prompt = `Identify and list the most newsworthy cybersecurity incidents (e.g., data breaches, ransomware attacks) that have occurred or been disclosed this year. For each incident, provide a title identifying the event and a concise one-sentence summary. Format each event as follows, and separate each with '---':
+    const prompt = `Identify and list the most newsworthy cybersecurity incidents (e.g., data breaches, ransomware attacks) that have occurred or been disclosed this year. For each incident, provide a title identifying the event, a concise one-sentence summary, and the date it was reported or occurred. Format each event as follows, and separate each with '---':
 
 Title: [The Incident Title, e.g., "Tech Giant Data Breach"]
-Summary: [A single sentence summarizing the incident.]`;
-    return await executeRiskQuery(prompt, parseRisks);
+Summary: [A single sentence summarizing the incident.]
+Date: [Date of event or disclosure, e.g., YYYY-MM-DD]`;
+    return await executeRiskQuery(prompt, parseHeadlines);
   } catch (error) {
     console.error("Error fetching cybersecurity incidents from Gemini API:", error);
     if (error instanceof Error) {

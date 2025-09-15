@@ -117,7 +117,7 @@ const App: React.FC = () => {
   
   const renderSummaryBrief = (
     brief: { risks: Risk[], loading: boolean, error: string | null, refreshRisks: () => void },
-    briefType: 'weekly' | 'monthly' | 'yearly' | 'fraud' | 'cyber'
+    briefType: 'weekly' | 'monthly' | 'yearly'
   ) => {
     const { risks, loading, error, refreshRisks } = brief;
 
@@ -169,12 +169,83 @@ const App: React.FC = () => {
     );
   };
 
-  const renderFraudEvents = (brief: { risks: Risk[], loading: boolean, error: string | null, refreshRisks: () => void }) => {
-    return renderSummaryBrief(brief, 'fraud');
-  };
-  
-  const renderCybersecurityIncidents = (brief: { risks: Risk[], loading: boolean, error: string | null, refreshRisks: () => void }) => {
-    return renderSummaryBrief(brief, 'cyber');
+  const renderGroupedByMonthReport = (
+    brief: { risks: Risk[], loading: boolean, error: string | null, refreshRisks: () => void },
+    reportType: 'fraud' | 'cyber'
+  ) => {
+    const { risks, loading, error, refreshRisks } = brief;
+
+    if (loading) {
+      return (
+        <div className="flex flex-col items-center justify-center text-center h-64">
+          <LoadingSpinner />
+          <p className="mt-4 text-slate-400 animate-pulse">Aggregating {reportType} events...</p>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="text-center p-8 bg-red-900/20 border border-red-500/30 rounded-lg animate-fade-in">
+          <h3 className="text-xl font-semibold text-red-400">An Error Occurred</h3>
+          <p className="text-slate-400 mt-2">{error}</p>
+          <button
+            onClick={refreshRisks}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-colors duration-200"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
+    const groupedByMonth = risks.reduce((acc, risk) => {
+      if (!risk.date) return acc;
+      try {
+        const monthKey = risk.date.substring(0, 7); // "YYYY-MM"
+        if (!acc[monthKey]) {
+          acc[monthKey] = [];
+        }
+        acc[monthKey].push(risk);
+      } catch (e) {
+        console.error("Could not parse date for grouping:", risk.date, e);
+      }
+      return acc;
+    }, {} as Record<string, Risk[]>);
+
+    const sortedMonths = Object.keys(groupedByMonth).sort((a, b) => b.localeCompare(a));
+
+    if (sortedMonths.length === 0) {
+      return (
+        <div className="text-center p-8 bg-gray-800/50 border border-gray-700/50 rounded-lg animate-fade-in">
+           <h3 className="text-xl font-semibold text-slate-300">No Events Found</h3>
+           <p className="text-slate-400 mt-2">Could not retrieve the {reportType} events report. Please try again.</p>
+           <button
+             onClick={refreshRisks}
+             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-colors duration-200"
+           >
+             Fetch Report
+           </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-8">
+        {sortedMonths.map(month => (
+          <section key={month}>
+            <h2 className="text-lg font-semibold text-slate-300 border-b border-gray-700 pb-2 mb-4">
+              {new Date(month + '-02T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}
+            </h2>
+            <div className="space-y-6">
+              {groupedByMonth[month].map((risk, index) => (
+                <RiskCard key={`${risk.title}-${index}`} risk={risk} index={index} />
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    );
   };
 
   const isLoading = 
@@ -197,8 +268,8 @@ const App: React.FC = () => {
           {reportType === 'briefs' && briefView === 'weekly' && renderSummaryBrief(weeklyBrief, 'weekly')}
           {reportType === 'briefs' && briefView === 'monthly' && renderSummaryBrief(monthlyBrief, 'monthly')}
           {reportType === 'briefs' && briefView === 'yearly' && renderSummaryBrief(yearlyBrief, 'yearly')}
-          {reportType === 'fraud' && renderFraudEvents(fraudEvents)}
-          {reportType === 'cyber' && renderCybersecurityIncidents(cybersecurityIncidents)}
+          {reportType === 'fraud' && renderGroupedByMonthReport(fraudEvents, 'fraud')}
+          {reportType === 'cyber' && renderGroupedByMonthReport(cybersecurityIncidents, 'cyber')}
         </main>
         <Footer />
       </div>
