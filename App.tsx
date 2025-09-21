@@ -9,8 +9,8 @@ import { useDailyRisks } from './hooks/useDailyRisks';
 import { useWeeklyRisks } from './hooks/useWeeklyRisks';
 import { useMonthlyRisks } from './hooks/useMonthlyRisks';
 import { useYearlyRisks } from './hooks/useYearlyRisks';
-import { useFraudEvents } from './hooks/useFraudEvents';
-import { useCybersecurityIncidents } from './hooks/useCybersecurityIncidents';
+import { useFraudEvents, type FraudEventsState } from './hooks/useFraudEvents';
+import { useCybersecurityIncidents, type CybersecurityIncidentsState } from './hooks/useCybersecurityIncidents';
 import type { Risk, DailyBriefData } from './types';
 
 export type BriefView = 'daily' | 'weekly' | 'monthly' | 'yearly';
@@ -170,12 +170,12 @@ const App: React.FC = () => {
   };
 
   const renderGroupedByMonthReport = (
-    brief: { risks: Risk[], loading: boolean, error: string | null, refreshRisks: () => void },
+    brief: FraudEventsState | CybersecurityIncidentsState,
     reportType: 'fraud' | 'cyber'
   ) => {
-    const { risks, loading, error, refreshRisks } = brief;
+    const { risks, loading, error, refreshRisks, searchStatus } = brief;
 
-    if (loading) {
+    if (loading && risks.length === 0) {
       return (
         <div className="flex flex-col items-center justify-center text-center h-64">
           <LoadingSpinner />
@@ -200,31 +200,46 @@ const App: React.FC = () => {
     }
 
     const groupedByMonth = risks.reduce((acc, risk) => {
-      if (!risk.date) return acc;
-      try {
-        const monthKey = risk.date.substring(0, 7); // "YYYY-MM"
-        if (!acc[monthKey]) {
-          acc[monthKey] = [];
+      let monthKey = 'Date Unknown';
+      if (risk.date) {
+        // First, try parsing as YYYY-MM-DD which can have timezone issues if not handled.
+        const dateWithTimezoneFix = new Date(risk.date + 'T00:00:00');
+        // Fallback for more general date formats
+        const flexibleDate = new Date(risk.date);
+
+        const d = !isNaN(dateWithTimezoneFix.getTime()) ? dateWithTimezoneFix : flexibleDate;
+
+        if (!isNaN(d.getTime())) {
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          monthKey = `${year}-${month}`;
         }
-        acc[monthKey].push(risk);
-      } catch (e) {
-        console.error("Could not parse date for grouping:", risk.date, e);
       }
+
+      if (!acc[monthKey]) {
+        acc[monthKey] = [];
+      }
+      acc[monthKey].push(risk);
       return acc;
     }, {} as Record<string, Risk[]>);
 
-    const sortedMonths = Object.keys(groupedByMonth).sort((a, b) => b.localeCompare(a));
+    const sortedMonths = Object.keys(groupedByMonth).sort((a, b) => {
+      if (a === 'Date Unknown') return 1; // Put 'Date Unknown' at the end
+      if (b === 'Date Unknown') return -1;
+      return b.localeCompare(a); // Sort other dates descending (e.g., 2024-07 before 2024-06)
+    });
 
-    if (sortedMonths.length === 0) {
+    if (sortedMonths.length === 0 && !loading) {
       return (
         <div className="text-center p-8 bg-gray-800/50 border border-gray-700/50 rounded-lg animate-fade-in">
            <h3 className="text-xl font-semibold text-slate-300">No Events Found</h3>
            <p className="text-slate-400 mt-2">Could not retrieve the {reportType} events report. Please try again.</p>
            <button
              onClick={refreshRisks}
-             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-colors duration-200"
+             disabled={loading}
+             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-colors duration-200 disabled:opacity-50"
            >
-             Fetch Report
+             {loading ? 'Fetching...' : 'Fetch Initial Report'}
            </button>
         </div>
       );
@@ -232,10 +247,28 @@ const App: React.FC = () => {
 
     return (
       <div className="space-y-8">
+        <div className="flex items-center justify-center gap-4 p-4 bg-gray-800/50 border-b border-gray-700/50 sticky top-0 z-10 backdrop-blur-sm">
+          <button
+            onClick={refreshRisks}
+            disabled={loading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[180px]"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 mr-2 ${loading ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            {loading ? 'Searching...' : 'Find New Incidents'}
+          </button>
+          <div className="h-6 text-sm flex-grow text-left">
+            {searchStatus === 'found' && <p className="text-green-400 animate-fade-in">New incidents added to the list!</p>}
+            {searchStatus === 'not_found' && <p className="text-slate-400 animate-fade-in">No new incidents found.</p>}
+          </div>
+        </div>
         {sortedMonths.map(month => (
           <section key={month}>
             <h2 className="text-lg font-semibold text-slate-300 border-b border-gray-700 pb-2 mb-4">
-              {new Date(month + '-02T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}
+              {month === 'Date Unknown'
+                ? 'Date Unknown'
+                : new Date(month + '-02T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}
             </h2>
             <div className="space-y-6">
               {groupedByMonth[month].map((risk, index) => (

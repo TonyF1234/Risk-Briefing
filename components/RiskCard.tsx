@@ -13,26 +13,55 @@ const LinkIcon: React.FC<{className?: string}> = ({className}) => (
     </svg>
 );
 
+const formatDate = (dateStr: string | undefined): string | null => {
+  if (!dateStr) return null;
+
+  // This handles YYYY-MM-DD by setting it to UTC midnight to avoid timezone issues.
+  const dateWithTimezoneFix = new Date(dateStr + 'T00:00:00');
+  // This is a more lenient parser for other formats.
+  const flexibleDate = new Date(dateStr);
+
+  const dateToUse = !isNaN(dateWithTimezoneFix.getTime()) ? dateWithTimezoneFix : flexibleDate;
+
+  if (isNaN(dateToUse.getTime())) {
+    // If both parsers failed, the string is not a recognizable date.
+    // Return the original string as it might contain useful info like "Q2 2024".
+    return dateStr;
+  }
+  
+  return dateToUse.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+};
+
 
 export const RiskCard: React.FC<RiskCardProps> = ({ risk, index }) => {
   const [sourcesVisible, setSourcesVisible] = useState(false);
   const animationDelay = `${index * 100}ms`;
+  const formattedDate = formatDate(risk.date);
 
   return (
     <div
       className="bg-gray-800/50 border border-gray-700/50 p-6 rounded-lg shadow-lg transition-all duration-300 hover:border-blue-500/50 hover:shadow-blue-500/10 animate-fade-in"
       style={{ animationDelay }}
     >
-      {risk.link ? (
-        <a href={risk.link} target="_blank" rel="noopener noreferrer" className="hover:underline text-slate-100">
-            <h2 className="text-xl font-bold">{risk.title}</h2>
-        </a>
-      ) : (
-        <h2 className="text-xl font-bold text-slate-100">{risk.title}</h2>
-      )}
+      <div className="flex justify-between items-start">
+        <div className="flex-grow">
+            {risk.link ? (
+                <a href={risk.link} target="_blank" rel="noopener noreferrer" className="hover:underline text-slate-100">
+                    <h2 className="text-xl font-bold">{risk.title}</h2>
+                </a>
+            ) : (
+                <h2 className="text-xl font-bold text-slate-100">{risk.title}</h2>
+            )}
+        </div>
+        {risk.isNew && (
+            <span className="ml-3 mt-1 flex-shrink-0 bg-green-500/20 text-green-300 text-xs font-semibold px-2.5 py-0.5 rounded-full animate-fade-in">
+                New
+            </span>
+        )}
+      </div>
 
-      {risk.date && (
-        <p className="mt-1 text-xs text-slate-500">{new Date(risk.date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+      {formattedDate && (
+        <p className="mt-1 text-xs text-slate-500">{formattedDate}</p>
       )}
 
       <p className="mt-3 text-slate-400 leading-relaxed">{risk.summary}</p>

@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Risk } from '../types';
 import { fetchCybersecurityIncidents } from '../services/geminiService';
 
-interface CybersecurityIncidentsState {
+export interface CybersecurityIncidentsState {
   risks: Risk[];
   loading: boolean;
   error: string | null;
   refreshRisks: () => void;
+  searchStatus: 'idle' | 'found' | 'not_found';
 }
 
 interface CybersecurityIncidentsProps {
@@ -21,33 +22,45 @@ export const useCybersecurityIncidents = ({ enabled }: CybersecurityIncidentsPro
   const [risks, setRisks] = useState<Risk[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isInitialized, setIsInitialized] = useState<boolean>(false);
+  const [searchStatus, setSearchStatus] = useState<'idle' | 'found' | 'not_found'>('idle');
 
-  const fetchAndSetRisks = useCallback(async (forceRefresh: boolean = false) => {
+  const storageKey = `cybersecurityIncidentsCache_${getCurrentYearString()}`;
+
+  const refreshRisks = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const yearStr = getCurrentYearString();
-    const storageKey = `cybersecurityIncidentsCache_${yearStr}`;
-
+    
     try {
-      if (!forceRefresh) {
-        const cachedData = localStorage.getItem(storageKey);
-        if (cachedData) {
-          setRisks(JSON.parse(cachedData));
-          setLoading(false);
-          return;
+      const isInitialFetch = risks.length === 0;
+      const existingTitles = isInitialFetch ? [] : risks.map(r => r.title);
+      
+      const newRisks = await fetchCybersecurityIncidents(existingTitles);
+      
+      const currentTitles = new Set(risks.map(r => r.title));
+      const uniqueNewRisks = newRisks.filter(risk => !currentTitles.has(risk.title));
+
+      if (uniqueNewRisks.length > 0) {
+        const newlyFoundRisksWithFlag = uniqueNewRisks.map(r => ({ ...r, isNew: true }));
+        const existingRisksWithoutFlag = risks.map(r => ({ ...r, isNew: false }));
+
+        const updatedRisksForState = [...newlyFoundRisksWithFlag, ...existingRisksWithoutFlag];
+        setRisks(updatedRisksForState);
+        
+        // Save to storage without the transient 'isNew' flag
+        const updatedRisksForStorage = [...uniqueNewRisks, ...risks];
+        localStorage.setItem(storageKey, JSON.stringify(updatedRisksForStorage));
+
+        setSearchStatus('found');
+      } else {
+        if (!isInitialFetch) {
+          setSearchStatus('not_found');
+        }
+         // Clear any existing 'new' flags if no new items are found
+        if (risks.some(r => r.isNew)) {
+          setRisks(risks.map(r => ({ ...r, isNew: false })));
         }
       }
-
-      const newRisks = await fetchCybersecurityIncidents();
-      setRisks(newRisks);
-      localStorage.setItem(storageKey, JSON.stringify(newRisks));
-      
-      // Clean up old yearly storage keys
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('cybersecurityIncidentsCache_') && key !== storageKey) {
-          localStorage.removeItem(key);
-        }
-      });
 
     } catch (e) {
       if (e instanceof Error) {
@@ -58,17 +71,40 @@ export const useCybersecurityIncidents = ({ enabled }: CybersecurityIncidentsPro
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [risks, storageKey]);
 
-  const refreshRisks = useCallback(() => {
-    fetchAndSetRisks(true);
-  }, [fetchAndSetRisks]);
-  
+  // Effect to initialize data from cache or network, once per session.
   useEffect(() => {
-    if (enabled && risks.length === 0 && !error) {
-      fetchAndSetRisks(false);
+    if (enabled && !isInitialized) {
+      setIsInitialized(true);
+      const loadInitialData = () => {
+        try {
+          const cachedData = localStorage.getItem(storageKey);
+          // Check if cache has content
+          if (cachedData && JSON.parse(cachedData).length > 0) {
+            setRisks(JSON.parse(cachedData));
+          } else {
+            // No valid cache, fetch from network. refreshRisks handles this.
+            refreshRisks();
+          }
+        } catch (e) {
+          console.error("Failed to load or parse cybersecurity incidents from cache", e);
+          localStorage.removeItem(storageKey);
+          // Still try to fetch from network after a cache error.
+          refreshRisks();
+        }
+      };
+      loadInitialData();
     }
-  }, [enabled, risks.length, error, fetchAndSetRisks]);
+  }, [enabled, isInitialized, refreshRisks, storageKey]);
 
-  return { risks, loading, error, refreshRisks };
+  // Effect to auto-clear search status message
+  useEffect(() => {
+    if (searchStatus !== 'idle') {
+      const timer = setTimeout(() => setSearchStatus('idle'), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [searchStatus]);
+
+  return { risks, loading, error, refreshRisks, searchStatus };
 };

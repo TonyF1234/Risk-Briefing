@@ -9,6 +9,7 @@ export interface Risk {
   sources: Source[];
   date?: string;
   link?: string;
+  isNew?: boolean;
 }
 
 export type DailyBriefData = Record<string, Risk[]>;
